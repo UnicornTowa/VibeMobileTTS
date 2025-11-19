@@ -15,9 +15,7 @@ class VoskTTS(private val context: Context) {
 
     private lateinit var ortEnvironment: OrtEnvironment
     private lateinit var ortSession: OrtSession
-    private lateinit var bertSession: OrtSession
     private val dictionary = mutableMapOf<String, String>()
-    private val vocab = mutableMapOf<String, Int>()
     private val softLetters = setOf("я", "ё", "ю", "и", "ь", "е")
     private val startSyl = setOf("#", "ъ", "ь", "а", "я", "о", "ё", "у", "ю", "э", "е", "и", "ы", "-")
     private val others = setOf("#", "+", "-", "ь", "ъ")
@@ -25,17 +23,17 @@ class VoskTTS(private val context: Context) {
     private val phonemeIdMap = mapOf(
         "_" to 0, "^" to 1, "$" to 2, " " to 3, "!" to 4,
         "'" to 5, "(" to 6, ")" to 7, "," to 8, "-" to 9,
-        "." to 10, "..." to 11, ":" to 12, ";" to 13, "?" to 14,
-        "a0" to 15, "a1" to 16, "b" to 17, "bj" to 18, "c" to 19,
-        "ch" to 20, "d" to 21, "dj" to 22, "e0" to 23, "e1" to 24,
-        "f" to 25, "fj" to 26, "g" to 27, "gj" to 28, "h" to 29,
-        "hj" to 30, "i0" to 31, "i1" to 32, "j" to 33, "k" to 34,
-        "kj" to 35, "l" to 36, "lj" to 37, "m" to 38, "mj" to 39,
-        "n" to 40, "nj" to 41, "o0" to 42, "o1" to 43, "p" to 44,
-        "pj" to 45, "r" to 46, "rj" to 47, "s" to 48, "sch" to 49,
-        "sh" to 50, "sj" to 51, "t" to 52, "tj" to 53, "u0" to 54,
-        "u1" to 55, "v" to 56, "vj" to 57, "y0" to 58, "y1" to 59,
-        "z" to 60, "zh" to 61, "zj" to 62
+        "." to 10, ":" to 11, ";" to 12, "?" to 13,
+        "a0" to 14, "a1" to 15, "b" to 16, "bj" to 17, "c" to 18,
+        "ch" to 19, "d" to 20, "dj" to 21, "e0" to 22, "e1" to 23,
+        "f" to 24, "fj" to 25, "g" to 26, "gj" to 27, "h" to 28,
+        "hj" to 29, "i0" to 30, "i1" to 31, "j" to 32, "k" to 33,
+        "kj" to 34, "l" to 35, "lj" to 36, "m" to 37, "mj" to 38,
+        "n" to 39, "nj" to 40, "o0" to 41, "o1" to 42, "p" to 43,
+        "pj" to 44, "r" to 45, "rj" to 46, "s" to 47, "sch" to 48,
+        "sh" to 49, "sj" to 50, "t" to 51, "tj" to 52, "u0" to 53,
+        "u1" to 54, "v" to 55, "vj" to 56, "y0" to 57, "y1" to 58,
+        "z" to 59, "zh" to 60, "zj" to 61
     )
     private val softHardCons = mapOf(
         "б" to "b", "в" to "v", "г" to "g", "Г" to "g",
@@ -73,7 +71,6 @@ class VoskTTS(private val context: Context) {
             // Копируем модели во внутреннее хранилище и загружаем оттуда
             Log.d(TAG, "Copying models to internal storage...")
             val modelFile = copyAssetToInternalStorage("models/model.onnx", "model.onnx")
-            val bertFile = copyAssetToInternalStorage("models/bert/model.onnx", "bert_model.onnx")
 
             // Загружаем основную модель
             Log.d(TAG, "Loading main model from: ${modelFile.absolutePath}")
@@ -81,15 +78,8 @@ class VoskTTS(private val context: Context) {
             ortSession = ortEnvironment.createSession(modelFile.absolutePath, sessionOptions)
             Log.d(TAG, "Main model loaded successfully")
 
-            // Загружаем BERT модель
-            Log.d(TAG, "Loading BERT model from: ${bertFile.absolutePath}")
-            Log.d(TAG, "BERT file size: ${bertFile.length() / 1024 / 1024} MB")
-            bertSession = ortEnvironment.createSession(bertFile.absolutePath, sessionOptions)
-            Log.d(TAG, "BERT model loaded successfully")
-
             // Загружаем словарь и vocab
             loadDictionary()
-            loadVocab()
 
             Log.d(TAG, "Initialization complete")
         } catch (e: Exception) {
@@ -161,33 +151,26 @@ class VoskTTS(private val context: Context) {
         Log.d(TAG, "Dictionary loaded: ${dictionary.size} words")
     }
 
-    private fun loadVocab() {
-        Log.d(TAG, "Loading vocab...")
-        context.assets.open("models/bert/vocab.txt").bufferedReader().use { reader ->
-            reader.lineSequence().forEachIndexed { index, token ->
-                vocab[token] = index
-            }
-        }
-        Log.d(TAG, "Vocab loaded: ${vocab.size} tokens")
-    }
-
     fun synthesize(text: String, speakerId: Int = 1): Pair<ShortArray, Int> {
         try {
             Log.d(TAG, "Starting synthesis for: $text")
 
-            // Подготовка данных
-            val (phonemeIds, bertEmbeddings) = g2pMultistream(text)
+            // Подготовка данных - получаем только ID фонем
+            val phonemeIds = g2pNoembed(text)
+            Log.d(TAG, "Phoneme IDs count: ${phonemeIds.size}")
+            Log.d(TAG, "Phoneme IDs: $phonemeIds")
 
             // Конвертируем в нужный формат для ONNX
-            val textArray = Array(5) { i ->
-                LongArray(phonemeIds.size) { j ->
-                    phonemeIds[j][i].toLong()
-                }
+            val textArray = LongArray(phonemeIds.size) { i ->
+                phonemeIds[i].toLong()
             }
 
+            // Создаем 2D тензор [1, sequence_length]
+            val shape = longArrayOf(1, phonemeIds.size.toLong())
             val textTensor = OnnxTensor.createTensor(
                 ortEnvironment,
-                arrayOf(textArray)
+                java.nio.LongBuffer.wrap(textArray),
+                shape
             )
 
             val textLengthsTensor = OnnxTensor.createTensor(
@@ -197,7 +180,7 @@ class VoskTTS(private val context: Context) {
 
             val scalesTensor = OnnxTensor.createTensor(
                 ortEnvironment,
-                floatArrayOf(0.8f, 1.0f, 0.8f) // noise_level, speed, duration_noise
+                floatArrayOf(0.667f, 1.0f, 0.8f)
             )
 
             val sidTensor = OnnxTensor.createTensor(
@@ -205,45 +188,74 @@ class VoskTTS(private val context: Context) {
                 longArrayOf(speakerId.toLong())
             )
 
-            val bertTensor = OnnxTensor.createTensor(
-                ortEnvironment,
-                arrayOf(bertEmbeddings.transpose())
-            )
+            // Логируем информацию о модели
+            Log.d(TAG, "Model input names: ${ortSession.inputNames}")
+            Log.d(TAG, "Model output names: ${ortSession.outputNames}")
 
             // Запускаем инференс
-            Log.d(TAG, "Running inference...")
+            Log.d(TAG, "Running inference with ${phonemeIds.size} phonemes...")
             val inputs = mapOf(
                 "input" to textTensor,
                 "input_lengths" to textLengthsTensor,
                 "scales" to scalesTensor,
-                "sid" to sidTensor,
-                "bert" to bertTensor
+                "sid" to sidTensor
             )
 
             val output = ortSession.run(inputs)
-            val audioTensor = output[0].value as Array<*>
+            Log.d(TAG, "Output count: ${output.size()}")
 
-            // Конвертируем в ShortArray
-            val audioFloat = when (audioTensor[0]) {
-                is FloatArray -> audioTensor[0] as FloatArray
-                is Array<*> -> (audioTensor[0] as Array<*>).flatMap {
-                    when(it) {
-                        is FloatArray -> it.toList()
-                        is Float -> listOf(it)
-                        else -> emptyList()
-                    }
-                }.toFloatArray()
-                else -> floatArrayOf()
+            if (output.size() == 0) {
+                Log.e(TAG, "No output from model!")
+                return shortArrayOf() to 0
             }
 
-            Log.d(TAG, "Audio generated: ${audioFloat.size} samples")
+            val audioTensor = output[0].value
+            Log.d(TAG, "Audio tensor type: ${audioTensor?.javaClass}")
+
+            // Конвертируем в FloatArray
+            val audioFloat = when (audioTensor) {
+                is Array<*> -> {
+                    Log.d(TAG, "Array dimensions: ${audioTensor.size}")
+
+                    // Рекурсивно распаковываем вложенные массивы
+                    fun flattenArray(arr: Any?): List<Float> {
+                        return when (arr) {
+                            is FloatArray -> arr.toList()
+                            is Array<*> -> arr.flatMap { flattenArray(it) }
+                            is Float -> listOf(arr)
+                            else -> emptyList()
+                        }
+                    }
+
+                    val flattened = flattenArray(audioTensor).toFloatArray()
+
+                    Log.d(TAG, "Flattened audio samples: ${flattened.size}")
+                    if (flattened.isNotEmpty()) {
+                        Log.d(TAG, "Audio range: ${flattened.minOrNull()} to ${flattened.maxOrNull()}")
+                    }
+
+                    flattened
+                }
+                is FloatArray -> {
+                    Log.d(TAG, "Direct FloatArray size: ${audioTensor.size}")
+                    audioTensor
+                }
+                else -> {
+                    Log.e(TAG, "Unexpected audio tensor type: ${audioTensor?.javaClass}")
+                    floatArrayOf()
+                }
+            }
+
+            Log.d(TAG, "Audio float samples: ${audioFloat.size}")
+            if (audioFloat.isNotEmpty()) {
+                Log.d(TAG, "Audio range: ${audioFloat.minOrNull()} to ${audioFloat.maxOrNull()}")
+            }
 
             // Закрываем тензоры
             textTensor.close()
             textLengthsTensor.close()
             scalesTensor.close()
             sidTensor.close()
-            bertTensor.close()
             output.close()
 
             // Конвертируем в int16
@@ -251,9 +263,11 @@ class VoskTTS(private val context: Context) {
 
         } catch (e: Exception) {
             Log.e(TAG, "Synthesis failed", e)
+            e.printStackTrace()
             return shortArrayOf() to 0
         }
     }
+
 
     private fun audioFloatToInt16(audio: FloatArray): ShortArray {
         val maxWavValue = 32767.0f
@@ -263,20 +277,8 @@ class VoskTTS(private val context: Context) {
         }
     }
 
-    private fun Array<FloatArray>.transpose(): Array<FloatArray> {
-        if (isEmpty()) return this
-        val rows = size
-        val cols = this[0].size
-        return Array(cols) { col ->
-            FloatArray(rows) { row ->
-                this[row][col]
-            }
-        }
-    }
-
     fun close() {
         if (::ortSession.isInitialized) ortSession.close()
-        if (::bertSession.isInitialized) bertSession.close()
         if (::ortEnvironment.isInitialized) ortEnvironment.close()
     }
 
@@ -345,173 +347,51 @@ class VoskTTS(private val context: Context) {
 
         return newPhones
     }
-    private fun getBertEmbeddings(text: String, phonemeCount: Int): Array<FloatArray> {
-        return try {
+    fun g2pNoembed(text: String): List<Int> {
+        val pattern = Regex("([,.?!;:\"() ])")
+        val phonemes = mutableListOf<String>()
 
-            val tokens = text.lowercase()
-                .replace(Regex("[^а-яёa-z\\s]"), "")
-                .split(Regex("\\s+"))
-                .filter { it.isNotEmpty() }
+        phonemes.add("^")
 
-            val tokenIds = mutableListOf<Long>()
-            tokenIds += 101L // CLS
-            for (t in tokens) {
-                val id = vocab[t] ?: vocab["[UNK]"] ?: 100
-                tokenIds += id.toLong()
-            }
-            tokenIds += 102L // SEP
-            val seqLen = tokenIds.size
+        val parts = text.lowercase().split(pattern)
 
-            val inputIds = Array(1) { LongArray(seqLen) }
-            val attentionMask = Array(1) { LongArray(seqLen) }
-            val tokenTypeIds = Array(1) { LongArray(seqLen) }
-            for (i in 0 until seqLen) {
-                inputIds[0][i] = tokenIds[i]
-                attentionMask[0][i] = 1L
-                tokenTypeIds[0][i] = 0L
-            }
+        for (word in parts) {
+            if (word.isEmpty()) continue
 
-            val inputIdsTensor = OnnxTensor.createTensor(ortEnvironment, inputIds)
-            val attentionMaskTensor = OnnxTensor.createTensor(ortEnvironment, attentionMask)
-            val tokenTypeIdsTensor = OnnxTensor.createTensor(ortEnvironment, tokenTypeIds)
-
-            val bertInputs = mapOf(
-                "input_ids" to inputIdsTensor,
-                "attention_mask" to attentionMaskTensor,
-                "token_type_ids" to tokenTypeIdsTensor
-            )
-
-            Log.d(TAG, "Running BERT inference: seqLen=$seqLen tokens=${tokens.size}")
-            val bertOutput = bertSession.run(bertInputs)
-            val rawOutput = bertOutput[0].value
-
-            val tokenEmbeddings: Array<FloatArray> = when (rawOutput) {
-                is Array<*> -> {
-                    if (rawOutput.isNotEmpty() && rawOutput[0] is Array<*>) {
-                        // Output: float[1][seq_len][hidden]
-                        @Suppress("UNCHECKED_CAST")
-                        val embeddings3d = rawOutput as Array<Array<FloatArray>>
-                        embeddings3d[0]
-                    } else if (rawOutput[0] is FloatArray) {
-                        // Output: float[seq_len][hidden] (batch dimension missing)
-                        @Suppress("UNCHECKED_CAST")
-                        rawOutput as Array<FloatArray>
-                    } else {
-                        throw IllegalStateException("Unexpected BERT output structure")
-                    }
-                }
-                else -> throw IllegalStateException("Unexpected BERT output type: ${rawOutput?.javaClass}")
-            }
-
-            bertOutput.close()
-            inputIdsTensor.close()
-            attentionMaskTensor.close()
-            tokenTypeIdsTensor.close()
-
-            distributeEmbeddings(tokenEmbeddings, phonemeCount)
-
-        } catch (e: Exception) {
-            Log.e(TAG, "BERT inference failed → fallback", e)
-            Array(phonemeCount) { FloatArray(768) { 0.01f } }
-        }
-    }
-    private fun distributeEmbeddings(tokenEmbeddings: Array<FloatArray>, phonemeCount: Int): Array<FloatArray> {
-        // Распределяем токен эмбеддинги равномерно по фонемам
-        val result = Array(phonemeCount) { FloatArray(768) }
-
-        if (tokenEmbeddings.isEmpty()) {
-            return Array(phonemeCount) { FloatArray(768) { 0.01f } }
-        }
-
-        val ratio = tokenEmbeddings.size.toFloat() / phonemeCount
-
-        for (i in 0 until phonemeCount) {
-            val tokenIndex = (i * ratio).toInt().coerceIn(0, tokenEmbeddings.size - 1)
-            result[i] = tokenEmbeddings[tokenIndex].clone()
-        }
-
-        return result
-    }
-    private fun g2pMultistream(text: String): Pair<List<IntArray>, Array<FloatArray>> {
-        val phonemes = mutableListOf<IntArray>()
-        val pattern = """(\.\.\.|[-\s,.?!;:"()])"""
-
-        // Начальный токен
-        var lastPunc = " "
-        var lastSentencePunc = " "
-        var inQuote = 0
-
-        phonemes.add(intArrayOf(
-            phonemeIdMap["^"] ?: 1,
-            phonemeIdMap["_"] ?: 0,
-            inQuote,
-            phonemeIdMap[lastPunc] ?: 0,
-            phonemeIdMap[lastSentencePunc] ?: 3
-        ))
-
-        // Разбиваем текст с сохранением пунктуации
-        val words = text.lowercase().split(Regex(pattern))
-            .filter { it.isNotEmpty() && !it.matches(Regex("\\s+")) }
-
-        for (word in words) {
-            // Проверяем пунктуацию
             when {
-                word == "\"" -> {
-                    inQuote = if (inQuote == 1) 0 else 1
-                    continue
+                word.matches(pattern) || word == "-" -> {
+                    phonemes.add(word)
                 }
-                word in listOf(".", "!", "?", "...") -> {
-                    lastSentencePunc = word
-                    lastPunc = word
-                    continue
+                dictionary.containsKey(word) -> {
+                    dictionary[word]!!.split(" ")
+                        .filter { it.isNotEmpty() }
+                        .forEach { phonemes.add(it) }
                 }
-                word in listOf(",", ";", ":", "-") -> {
-                    lastPunc = word
-                    continue
+                else -> {
+                    convert(word).split(" ")
+                        .filter { it.isNotEmpty() }
+                        .forEach { phonemes.add(it) }
                 }
             }
-
-            // Получаем фонемы для слова
-            val wordPhonemes = if (dictionary.containsKey(word)) {
-                dictionary[word]!!.split(" ")
-            } else {
-                convert(word).split(" ")
-            }
-
-            // Добавляем фонемы слова
-            for (p in wordPhonemes) {
-                val phonemeId = phonemeIdMap[p] ?: phonemeIdMap["_"] ?: 0
-                phonemes.add(intArrayOf(
-                    phonemeId,
-                    phonemeIdMap["_"] ?: 0,
-                    inQuote,
-                    phonemeIdMap[lastPunc] ?: 0,
-                    phonemeIdMap[lastSentencePunc] ?: 3
-                ))
-            }
-
-            // Добавляем пробел после слова
-            phonemes.add(intArrayOf(
-                phonemeIdMap[" "] ?: 3,
-                phonemeIdMap["_"] ?: 0,
-                inQuote,
-                phonemeIdMap[lastPunc] ?: 0,
-                phonemeIdMap[lastSentencePunc] ?: 3
-            ))
         }
 
-        // Конечный токен
-        phonemes.add(intArrayOf(
-            phonemeIdMap["$"] ?: 2,
-            phonemeIdMap["_"] ?: 0,
-            0,
-            phonemeIdMap[" "] ?: 3,
-            phonemeIdMap[lastSentencePunc] ?: 3
-        ))
+        phonemes.add("$")
 
-        // Создаем BERT эмбеддинги
-        val bertEmbeddings = getBertEmbeddings(text, phonemes.size)
+        val phonemeIds = mutableListOf<Int>()
 
-        return phonemes to bertEmbeddings
+        val firstId = phonemeIdMap[phonemes[0]] ?: 0
+        phonemeIds.add(firstId)
+
+        for (i in 1 until phonemes.size) {
+            phonemeIds.add(0) // blank token
+            val phonemeId = phonemeIdMap[phonemes[i]] ?: 0
+            phonemeIds.add(phonemeId)
+        }
+
+        Log.d(TAG, "Text: $text")
+        Log.d(TAG, "Phonemes: ${phonemes.joinToString(" ")}")
+        Log.d(TAG, "Phoneme IDs: ${phonemeIds.joinToString(", ")}")
+
+        return phonemeIds
     }
 }
