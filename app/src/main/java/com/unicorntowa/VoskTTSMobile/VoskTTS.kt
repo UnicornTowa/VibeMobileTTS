@@ -4,18 +4,16 @@ import android.content.Context
 import android.util.Log
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
-import ai.onnxruntime.OrtProvider
 import ai.onnxruntime.OrtSession
 import java.io.File
 
-class VoskTTS(private val context: Context) {
+class VoskTTS(private val context: Context, private val modelType: ModelType) {
     companion object {
         private const val TAG = "VoskTTS"
     }
 
     private lateinit var ortEnvironment: OrtEnvironment
     private lateinit var ortSession: OrtSession
-    private val dictionary = mutableMapOf<String, String>()
     private val softLetters = setOf("я", "ё", "ю", "и", "ь", "е")
     private val startSyl = setOf("#", "ъ", "ь", "а", "я", "о", "ё", "у", "ю", "э", "е", "и", "ы", "-")
     private val others = setOf("#", "+", "-", "ь", "ъ")
@@ -53,37 +51,33 @@ class VoskTTS(private val context: Context) {
         "и" to "i", "ы" to "y"
     )
 
+    fun getModelName(): String = modelType.displayName
+
     fun initialize() {
         try {
-            Log.d(TAG, "Initializing ONNX Runtime...")
+            Log.d(TAG, "Initializing ONNX Runtime for ${modelType.displayName}...")
+            val startTime = System.currentTimeMillis()
+
             ortEnvironment = OrtEnvironment.getEnvironment()
 
             val sessionOptions = OrtSession.SessionOptions()
             sessionOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
             sessionOptions.setIntraOpNumThreads(2)
 
-//            val availableProviders = OrtEnvironment.getAvailableProviders()
-//            if (availableProviders.contains(OrtProvider.NNAPI)) {
-//                sessionOptions.addNnapi()
-//                Log.d(TAG, "Using NNAPI")
-//            }
-
             // Копируем модели во внутреннее хранилище и загружаем оттуда
-            Log.d(TAG, "Copying models to internal storage...")
-            val modelFile = copyAssetToInternalStorage("models/model.onnx", "model.onnx")
+            Log.d(TAG, "Copying ${modelType.displayName} to internal storage...")
+            val modelFile = copyAssetToInternalStorage(modelType.modelPath, modelType.fileName)
 
             // Загружаем основную модель
-            Log.d(TAG, "Loading main model from: ${modelFile.absolutePath}")
+            Log.d(TAG, "Loading ${modelType.displayName} from: ${modelFile.absolutePath}")
             Log.d(TAG, "Model file size: ${modelFile.length() / 1024 / 1024} MB")
             ortSession = ortEnvironment.createSession(modelFile.absolutePath, sessionOptions)
-            Log.d(TAG, "Main model loaded successfully")
 
-            // Загружаем словарь и vocab
-            loadDictionary()
+            val loadTime = System.currentTimeMillis() - startTime
+            Log.d(TAG, "${modelType.displayName} loaded successfully in ${loadTime}ms")
 
-            Log.d(TAG, "Initialization complete")
         } catch (e: Exception) {
-            Log.e(TAG, "Error during initialization", e)
+            Log.e(TAG, "Error during initialization of ${modelType.displayName}", e)
             throw e
         }
     }
@@ -129,31 +123,9 @@ class VoskTTS(private val context: Context) {
         return outputFile
     }
 
-    private fun loadDictionary() {
-        Log.d(TAG, "Loading dictionary...")
-        val probs = mutableMapOf<String, Float>()
-
-        context.assets.open("models/dictionary").bufferedReader().use { reader ->
-            reader.lineSequence().forEach { line ->
-                val items = line.split(" ", limit = 3)
-                if (items.size >= 3) {
-                    val word = items[0]
-                    val prob = items[1].toFloatOrNull() ?: 0f
-                    val phonemes = items[2]
-
-                    if (probs.getOrDefault(word, 0f) < prob) {
-                        dictionary[word] = phonemes
-                        probs[word] = prob
-                    }
-                }
-            }
-        }
-        Log.d(TAG, "Dictionary loaded: ${dictionary.size} words")
-    }
-
     fun synthesize(text: String, speakerId: Int = 1): Pair<ShortArray, Int> {
         try {
-            Log.d(TAG, "Starting synthesis for: $text")
+            Log.d(TAG, "Starting synthesis for: $text using ${modelType.displayName}")
 
             // Подготовка данных - получаем только ID фонем
             val phonemeIds = g2pNoembed(text)
@@ -347,6 +319,7 @@ class VoskTTS(private val context: Context) {
 
         return newPhones
     }
+
     fun g2pNoembed(text: String): List<Int> {
         val pattern = Regex("([,.?!;:\"() ])")
         val phonemes = mutableListOf<String>()
@@ -362,8 +335,8 @@ class VoskTTS(private val context: Context) {
                 word.matches(pattern) || word == "-" -> {
                     phonemes.add(word)
                 }
-                dictionary.containsKey(word) -> {
-                    dictionary[word]!!.split(" ")
+                DictionaryManager.getPhonemes(word) != null -> {
+                    DictionaryManager.getPhonemes(word)!!.split(" ")
                         .filter { it.isNotEmpty() }
                         .forEach { phonemes.add(it) }
                 }

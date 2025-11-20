@@ -48,6 +48,15 @@ class TtsViewModel(app: Application) : AndroidViewModel(app) {
     var hasSynthesizedAudio by mutableStateOf(false)
         private set
 
+    var currentModelType by mutableStateOf(ModelType.VOSK_TTS)
+        private set
+
+    var isModelLoading by mutableStateOf(false)
+        private set
+
+    var loadingMessage by mutableStateOf("Initializing...")
+        private set
+
     private var voskTTS: VoskTTS? = null
 
     private val audioPlayer = AudioPlayer(SAMPLE_RATE) {
@@ -57,25 +66,102 @@ class TtsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     init {
-        initializeModel()
+        initializeAll()
     }
 
-    private fun initializeModel() {
+    private fun initializeAll() {
         viewModelScope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) {
+                isModelLoading = true
+                isInitialized = false
+                initializationError = null
+                loadingMessage = "Loading dictionary..."
+            }
+
             try {
-                voskTTS = VoskTTS(getApplication())
+                // Загружаем словарь один раз
+                if (!DictionaryManager.isInitialized()) {
+                    DictionaryManager.initialize(getApplication())
+                }
+
+                withContext(Dispatchers.Main) {
+                    loadingMessage = "Loading ${currentModelType.displayName}..."
+                }
+
+                // Загружаем модель
+                voskTTS?.close()
+                voskTTS = VoskTTS(getApplication(), currentModelType)
                 voskTTS!!.initialize()
 
                 withContext(Dispatchers.Main) {
                     isInitialized = true
+                    isModelLoading = false
+                    loadingMessage = ""
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Model init failed", e)
+                Log.e(TAG, "Initialization failed", e)
                 withContext(Dispatchers.Main) {
                     initializationError = e.message
+                    isModelLoading = false
+                    loadingMessage = ""
                 }
             }
         }
+    }
+
+    private fun switchModelOnly() {
+        viewModelScope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) {
+                isModelLoading = true
+                isInitialized = false
+                loadingMessage = "Loading ${currentModelType.displayName}..."
+            }
+
+            try {
+                voskTTS?.close()
+                voskTTS = VoskTTS(getApplication(), currentModelType)
+                voskTTS!!.initialize()
+
+                withContext(Dispatchers.Main) {
+                    isInitialized = true
+                    isModelLoading = false
+                    loadingMessage = ""
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Model switch failed", e)
+                withContext(Dispatchers.Main) {
+                    initializationError = e.message
+                    isModelLoading = false
+                    loadingMessage = ""
+                }
+            }
+        }
+    }
+
+    fun switchModel() {
+        // Останавливаем воспроизведение если идет
+        if (isPlaying) {
+            audioPlayer.stop()
+            isPlaying = false
+        }
+
+        // Переключаем модель
+        currentModelType = if (currentModelType == ModelType.VOSK_TTS) {
+            ModelType.VOSK_TTS_QUANTIZED
+        } else {
+            ModelType.VOSK_TTS
+        }
+
+        // Сбрасываем состояние синтеза
+        hasSynthesizedAudio = false
+        synthesisTime = null
+        numTokens = null
+        tokensPerSecond = null
+        audioDurationMs = null
+        rtf = null
+
+        // Переинициализируем только модель (словарь уже загружен)
+        switchModelOnly()
     }
 
     fun onInputTextChanged(text: String) {

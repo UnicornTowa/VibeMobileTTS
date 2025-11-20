@@ -21,8 +21,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.unicorntowa.VoskTTSMobile.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
@@ -52,19 +54,33 @@ fun TtsScreen(viewModel: TtsViewModel) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Model selector
+        ModelSelector(
+            currentModel = viewModel.currentModelType,
+            onModelSwitch = { viewModel.switchModel() },
+            enabled = !viewModel.isModelLoading
+        )
+
         when {
             viewModel.initializationError != null -> {
                 Text("Error: ${viewModel.initializationError}", color = MaterialTheme.colorScheme.error)
             }
+            viewModel.isModelLoading -> {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(viewModel.loadingMessage)
+                }
+            }
             !viewModel.isInitialized -> {
-                Text("Loading model...")
+                Text("Initializing...")
             }
             else -> {
                 OutlinedTextField(
                     value = viewModel.inputText,
                     onValueChange = { viewModel.onInputTextChanged(it) },
                     label = { Text("Enter text") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp)
                 )
 
                 Button(
@@ -101,6 +117,52 @@ fun TtsScreen(viewModel: TtsViewModel) {
                     )
                 }
             }
+        }
+    }
+}
+
+
+@Composable
+fun ModelSelector(
+    currentModel: ModelType,
+    onModelSwitch: () -> Unit,
+    enabled: Boolean
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(
+            onClick = onModelSwitch,
+            enabled = enabled
+        ) {
+            Text("◄", fontSize = 24.sp)
+        }
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Current Model:",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = currentModel.displayName,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        IconButton(
+            onClick = onModelSwitch,
+            enabled = enabled
+        ) {
+            Text("►", fontSize = 24.sp)
         }
     }
 }
