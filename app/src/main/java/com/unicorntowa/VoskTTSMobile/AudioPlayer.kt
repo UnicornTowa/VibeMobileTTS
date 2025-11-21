@@ -12,10 +12,8 @@ class AudioPlayer(
     companion object {
         private const val TAG = "AudioPlayer"
     }
-
     private var track: AudioTrack? = null
     private var pcmData: ShortArray? = null
-
     fun loadPcm(data: ShortArray) {
         release()
 
@@ -59,7 +57,6 @@ class AudioPlayer(
 
         track = audioTrack
     }
-
     fun play() {
         try {
             val t = track ?: return
@@ -76,7 +73,6 @@ class AudioPlayer(
             Log.e(TAG, "play() failed", e)
         }
     }
-
     fun stop() {
         try {
             val t = track ?: return
@@ -88,11 +84,6 @@ class AudioPlayer(
             Log.e(TAG, "stop() failed", e)
         }
     }
-
-    fun isPlaying(): Boolean {
-        return track?.playState == AudioTrack.PLAYSTATE_PLAYING
-    }
-
     fun release() {
         try {
             track?.release()

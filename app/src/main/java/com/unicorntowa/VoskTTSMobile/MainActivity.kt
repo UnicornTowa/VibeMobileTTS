@@ -42,9 +42,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
 fun Float.format(digits: Int) = "%.${digits}f".format(this)
-
 @Composable
 fun TtsScreen(viewModel: TtsViewModel) {
     Column(
@@ -57,10 +55,10 @@ fun TtsScreen(viewModel: TtsViewModel) {
         // Model selector
         ModelSelector(
             currentModel = viewModel.currentModelType,
-            onModelSwitch = { viewModel.switchModel() },
+            onModelSwitchPrevious = { viewModel.switchModelPrevious() },
+            onModelSwitchNext = { viewModel.switchModelNext() },
             enabled = !viewModel.isModelLoading
         )
-
         when {
             viewModel.initializationError != null -> {
                 Text("Error: ${viewModel.initializationError}", color = MaterialTheme.colorScheme.error)
@@ -82,7 +80,6 @@ fun TtsScreen(viewModel: TtsViewModel) {
                         .fillMaxWidth()
                         .padding(top = 16.dp)
                 )
-
                 Button(
                     onClick = { viewModel.synthesizeText() },
                     modifier = Modifier.padding(top = 8.dp),
@@ -90,7 +87,6 @@ fun TtsScreen(viewModel: TtsViewModel) {
                 ) {
                     Text("Synthesize")
                 }
-
                 viewModel.synthesisTime?.let {
                     Text("Synthesis time: $it ms", modifier = Modifier.padding(top = 8.dp))
                 }
@@ -109,7 +105,6 @@ fun TtsScreen(viewModel: TtsViewModel) {
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
-
                 if (viewModel.hasSynthesizedAudio) {
                     Player(
                         isPlaying = viewModel.isPlaying,
@@ -120,12 +115,11 @@ fun TtsScreen(viewModel: TtsViewModel) {
         }
     }
 }
-
-
 @Composable
 fun ModelSelector(
     currentModel: ModelType,
-    onModelSwitch: () -> Unit,
+    onModelSwitchPrevious: () -> Unit,
+    onModelSwitchNext: () -> Unit,
     enabled: Boolean
 ) {
     Row(
@@ -136,12 +130,11 @@ fun ModelSelector(
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(
-            onClick = onModelSwitch,
+            onClick = onModelSwitchPrevious,
             enabled = enabled
         ) {
             Text("◄", fontSize = 24.sp)
         }
-
         Column(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -157,16 +150,14 @@ fun ModelSelector(
                 color = MaterialTheme.colorScheme.primary
             )
         }
-
         IconButton(
-            onClick = onModelSwitch,
+            onClick = onModelSwitchNext,
             enabled = enabled
         ) {
             Text("►", fontSize = 24.sp)
         }
     }
 }
-
 @Composable
 fun Player(isPlaying: Boolean, onPlayPauseClicked: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -181,7 +172,6 @@ fun Player(isPlaying: Boolean, onPlayPauseClicked: () -> Unit) {
         Text(if (isPlaying) "Playing" else "Stopped")
     }
 }
-
 @Preview(showBackground = true)
 @Composable
 fun TtsScreenPreview() {

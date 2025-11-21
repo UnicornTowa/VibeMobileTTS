@@ -11,7 +11,6 @@ class VoskTTS(private val context: Context, private val modelType: ModelType) {
     companion object {
         private const val TAG = "VoskTTS"
     }
-
     private lateinit var ortEnvironment: OrtEnvironment
     private lateinit var ortSession: OrtSession
     private val softLetters = setOf("я", "ё", "ю", "и", "ь", "е")
@@ -39,20 +38,15 @@ class VoskTTS(private val context: Context, private val modelType: ModelType) {
         "м" to "m", "н" to "n", "п" to "p", "р" to "r",
         "с" to "s", "т" to "t", "ф" to "f", "х" to "h"
     )
-
     private val otherCons = mapOf(
         "ж" to "zh", "ц" to "c", "ч" to "ch",
         "ш" to "sh", "щ" to "sch", "й" to "j"
     )
-
     private val vowels = mapOf(
         "а" to "a", "я" to "a", "у" to "u", "ю" to "u",
         "о" to "o", "ё" to "o", "э" to "e", "е" to "e",
         "и" to "i", "ы" to "y"
     )
-
-    fun getModelName(): String = modelType.displayName
-
     fun initialize() {
         try {
             Log.d(TAG, "Initializing ONNX Runtime for ${modelType.displayName}...")

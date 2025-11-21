@@ -138,18 +138,24 @@ class TtsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun switchModel() {
+    fun switchModelNext() {
+        val allModels = ModelType.values()
+        val currentIndex = allModels.indexOf(currentModelType)
+        currentModelType = allModels[(currentIndex + 1) % allModels.size]
+        reloadModel()
+    }
+
+    fun switchModelPrevious() {
+        val allModels = ModelType.values()
+        val currentIndex = allModels.indexOf(currentModelType)
+        currentModelType = allModels[(currentIndex - 1 + allModels.size) % allModels.size]
+        reloadModel()
+    }
+    private fun reloadModel() {
         // Останавливаем воспроизведение если идет
         if (isPlaying) {
             audioPlayer.stop()
             isPlaying = false
-        }
-
-        // Переключаем модель
-        currentModelType = if (currentModelType == ModelType.VOSK_TTS) {
-            ModelType.VOSK_TTS_QUANTIZED
-        } else {
-            ModelType.VOSK_TTS
         }
 
         // Сбрасываем состояние синтеза
@@ -167,7 +173,6 @@ class TtsViewModel(app: Application) : AndroidViewModel(app) {
     fun onInputTextChanged(text: String) {
         inputText = text
     }
-
     fun synthesizeText() {
         if (!isInitialized || inputText.isBlank()) return
 
